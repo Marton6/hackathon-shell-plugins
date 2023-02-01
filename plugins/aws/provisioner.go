@@ -30,11 +30,7 @@ type awsProvisioner struct {
 }
 
 func AWSProvisioner() sdk.Provisioner {
-	return awsProvisioner{
-		envVarProvisioner: provision.EnvVarProvisioner{
-			Schema: defaultEnvVarMapping,
-		},
-	}
+	return awsProvisioner{}
 }
 
 func (p awsProvisioner) Provision(ctx context.Context, in sdk.ProvisionInput, out *sdk.ProvisionOutput) {
