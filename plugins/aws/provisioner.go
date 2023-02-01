@@ -2,10 +2,17 @@ package aws
 
 import (
 	"context"
+	"log"
+	"os"
+	"strings"
 
 	"github.com/1Password/shell-plugins/sdk"
 	"github.com/1Password/shell-plugins/sdk/provision"
-	"github.com/1Password/shell-plugins/sdk/schema/fieldname"
+	"github.com/Versent/saml2aws/pkg/creds"
+	"github.com/pkg/errors"
+	saml2aws "github.com/versent/saml2aws/v2"
+	"github.com/versent/saml2aws/v2/pkg/cfg"
+	"github.com/versent/saml2aws/v2/pkg/samlcache"
 )
 
 type awsProvisioner struct {
@@ -22,16 +29,160 @@ func AWSProvisioner() sdk.Provisioner {
 }
 
 func (p awsProvisioner) Provision(ctx context.Context, in sdk.ProvisionInput, out *sdk.ProvisionOutput) {
-	totp, hasTotp := in.ItemFields[fieldname.OneTimePassword]
-	mfaSerial, hasMFASerial := in.ItemFields[fieldname.MFASerial]
+	/*
+		totp, hasTotp := in.ItemFields[fieldname.OneTimePassword]
+		mfaSerial, hasMFASerial := in.ItemFields[fieldname.MFASerial]
 
-	if hasTotp && hasMFASerial {
-		p.stsProvisioner.MFASerial = mfaSerial
-		p.stsProvisioner.TOTPCode = totp
-		p.stsProvisioner.Provision(ctx, in, out)
-	} else {
-		p.envVarProvisioner.Provision(ctx, in, out)
+		if hasTotp && hasMFASerial {
+			p.stsProvisioner.MFASerial = mfaSerial
+			p.stsProvisioner.TOTPCode = totp
+			p.stsProvisioner.Provision(ctx, in, out)
+		} else {
+			p.envVarProvisioner.Provision(ctx, in, out)
+		}
+	*/
+	err := p.provisionSAML()
+	if err != nil {
+		panic(err)
 	}
+}
+
+func (p awsProvisioner) provisionSAML() error {
+	accountName := "accName"
+
+	// TODO: after the hackathon, move the saml cache into the plugin cache
+	samlCacheFile := "./saml-cache"
+
+	cacheProvider := &samlcache.SAMLCacheProvider{
+		Account:  accountName,
+		Filename: samlCacheFile,
+	}
+
+	/*
+		SAML2AWS_MFA=OKTA
+		SAML2AWS_IDP_PROVIDER=Okta
+		SAML2AWS_URL=https://1password.okta.com/home/amazon_aws/0oacbnkkgfGssywZl357/272
+		SAML2AWS_PASSWORD=op://Private/Oktabun/password
+		SAML2AWS_USERNAME=op://Private/Oktabun/username
+		SAML2AWS_MFA_TOKEN=$(op item get Oktabun --totp)
+
+		op run -- saml2aws login
+		 --skip-prompt
+		 --disable-keychain
+		 --session-duration 43200
+		 --profile agilebits-devel
+		 --role arn:aws:iam::729119775555:role/dev_Administrator
+		 --region us-east-1'
+	*/
+	idpAccount := cfg.IDPAccount{
+		Name:                  accountName,
+		AppID:                 "",
+		URL:                   "",
+		Username:              "",
+		Provider:              "",
+		MFA:                   "",
+		SkipVerify:            false,
+		Timeout:               0,
+		AmazonWebservicesURN:  "",
+		SessionDuration:       0,
+		Profile:               "",
+		ResourceID:            "",
+		Subdomain:             "",
+		RoleARN:               "",
+		Region:                "",
+		HttpAttemptsCount:     "",
+		HttpRetryDelay:        "",
+		CredentialsFile:       "",
+		SAMLCache:             false,
+		SAMLCacheFile:         samlCacheFile,
+		TargetURL:             "",
+		DisableRememberDevice: false,
+		DisableSessions:       false,
+		Prompter:              "",
+	}
+	provider, err := saml2aws.NewSAMLClient(&idpAccount)
+	if err != nil {
+		return errors.Wrap(err, "Error building IdP client.")
+	}
+
+	loginDetails, err := resolveLoginDetails(&idpAccount)
+	if err != nil {
+		log.Printf("%+v", err)
+		os.Exit(1)
+	}
+
+	err = provider.Validate(loginDetails)
+	if err != nil {
+		return errors.Wrap(err, "Error validating login details.")
+	}
+
+	var samlAssertion string
+	if account.SAMLCache {
+		if cacheProvider.IsValid() {
+			samlAssertion, err = cacheProvider.ReadRaw()
+			if err != nil {
+				panic("could not read saml cache")
+			}
+		} else {
+			panic("could not get valid saml cache")
+		}
+	} else {
+		log.Printf("Authenticating as %s ...", loginDetails.Username)
+	}
+}
+
+func resolveLoginDetails(account *cfg.IDPAccount, mfaToken string) (*creds.LoginDetails, error) {
+
+	// log.Printf("loginFlags %+v", loginFlags)
+
+	loginDetails := &creds.LoginDetails{URL: account.URL, Username: account.Username, MFAToken: mfaToken}
+
+	// log.Printf("Using IdP Account %s to access %s %s", loginFlags.CommonFlags.IdpAccount, account.Provider, account.URL)
+
+	var err error
+	// if user disabled keychain, dont use Okta sessions & dont remember Okta MFA device
+	if strings.ToLower(account.Provider) == "okta" {
+		account.DisableSessions = true
+		account.DisableRememberDevice = true
+	}
+
+	// log.Printf("%s %s", savedUsername, savedPassword)
+
+	// if you supply a username in a flag it takes precedence
+	if loginFlags.CommonFlags.Username != "" {
+		loginDetails.Username = loginFlags.CommonFlags.Username
+	}
+
+	// if you supply a password in a flag it takes precedence
+	if loginFlags.CommonFlags.Password != "" {
+		loginDetails.Password = loginFlags.CommonFlags.Password
+	}
+
+	// if you supply a cleint_id in a flag it takes precedence
+	if loginFlags.CommonFlags.ClientID != "" {
+		loginDetails.ClientID = loginFlags.CommonFlags.ClientID
+	}
+
+	// if you supply a client_secret in a flag it takes precedence
+	if loginFlags.CommonFlags.ClientSecret != "" {
+		loginDetails.ClientSecret = loginFlags.CommonFlags.ClientSecret
+	}
+
+	// log.Printf("loginDetails %+v", loginDetails)
+
+	// if skip prompt was passed just pass back the flag values
+	if loginFlags.CommonFlags.SkipPrompt {
+		return loginDetails, nil
+	}
+
+	if account.Provider != "Shell" {
+		err = saml2aws.PromptForLoginDetails(loginDetails, account.Provider)
+		if err != nil {
+			return nil, errors.Wrap(err, "Error occurred accepting input.")
+		}
+	}
+
+	return loginDetails, nil
 }
 
 func (p awsProvisioner) Deprovision(ctx context.Context, in sdk.DeprovisionInput, out *sdk.DeprovisionOutput) {
