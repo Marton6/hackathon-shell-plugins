@@ -143,10 +143,7 @@ func (p awsProvisioner) provisionSAML() error {
 	} else {
 		log.Printf("Authenticating as %s ...", loginDetails.Username)
 	}
-}
-
-func resolveLoginDetails(account *cfg.IDPAccount, mfaToken string, username string) (*creds.LoginDetails, error) {
-
+	return nil
 }
 
 func (p awsProvisioner) Deprovision(ctx context.Context, in sdk.DeprovisionInput, out *sdk.DeprovisionOutput) {
