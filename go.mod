@@ -13,7 +13,6 @@ require (
 	github.com/hashicorp/go-plugin v1.4.6
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.8.1
-	github.com/versent/saml2aws v2.17.0+incompatible
 	github.com/versent/saml2aws/v2 v2.36.2
 	gopkg.in/ini.v1 v1.67.0
 	gopkg.in/yaml.v2 v2.4.0
