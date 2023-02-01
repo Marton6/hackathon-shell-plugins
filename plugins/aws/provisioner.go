@@ -2,10 +2,13 @@ package aws
 
 import (
 	"context"
-	"github.com/1Password/shell-plugins/sdk/schema/fieldname"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/1Password/shell-plugins/sdk/schema/fieldname"
+	"github.com/versent/saml2aws/v2/pkg/awsconfig"
+	"github.com/versent/saml2aws/v2/pkg/creds"
 
 	"github.com/pkg/errors"
 
@@ -16,8 +19,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sts"
-	"github.com/versent/saml2aws/pkg/awsconfig"
-	"github.com/versent/saml2aws/pkg/creds"
 	"github.com/versent/saml2aws/v2"
 	"github.com/versent/saml2aws/v2/pkg/cfg"
 	"github.com/versent/saml2aws/v2/pkg/samlcache"
@@ -176,12 +177,12 @@ func (p awsProvisioner) provisionSAML(in sdk.ProvisionInput) error {
 		return errors.New("Didn't get saml assertions")
 	}
 
-	role, err := selectAwsRole(samlAssertion, idpAccount)
+	role, err := selectAwsRole(samlAssertion, &idpAccount)
 	if err != nil {
 		return errors.Wrap(err, "Failed to assume role. Please check whether you are permitted to assume the given role for the AWS service.")
 	}
 
-	awsCreds, err := loginToStsUsingRole(idpAccount, role, samlAssertion)
+	awsCreds, err := loginToStsUsingRole(&idpAccount, role, samlAssertion)
 	if err != nil {
 		return errors.Wrap(err, "Error logging into AWS role using SAML assertion.")
 	}
