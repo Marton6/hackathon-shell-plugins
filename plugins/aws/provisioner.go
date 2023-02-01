@@ -2,13 +2,17 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"log"
+	"os"
 	"strings"
+
+	b64 "encoding/base64"
 
 	"github.com/1Password/shell-plugins/sdk"
 	"github.com/1Password/shell-plugins/sdk/provision"
-	"github.com/Versent/saml2aws/pkg/creds"
 	"github.com/pkg/errors"
+	"github.com/versent/saml2aws/pkg/creds"
 	saml2aws "github.com/versent/saml2aws/v2"
 	"github.com/versent/saml2aws/v2/pkg/cfg"
 	"github.com/versent/saml2aws/v2/pkg/samlcache"
@@ -132,7 +136,7 @@ func (p awsProvisioner) provisionSAML() error {
 	}
 
 	var samlAssertion string
-	if account.SAMLCache {
+	if idpAccount.SAMLCache {
 		if cacheProvider.IsValid() {
 			samlAssertion, err = cacheProvider.ReadRaw()
 			if err != nil {
@@ -144,6 +148,33 @@ func (p awsProvisioner) provisionSAML() error {
 	} else {
 		log.Printf("Authenticating as %s ...", loginDetails.Username)
 	}
+
+	if samlAssertion == "" {
+		// samlAssertion was not cached
+		samlAssertion, err = provider.Authenticate(loginDetails)
+		if err != nil {
+			return errors.Wrap(err, "Error authenticating to IdP.")
+		}
+		if idpAccount.SAMLCache {
+			err = cacheProvider.WriteRaw(samlAssertion)
+			if err != nil {
+				return errors.Wrap(err, "Could not write SAML cache.")
+			}
+		}
+	}
+
+	if samlAssertion == "" {
+		log.Println("Response did not contain a valid SAML assertion.")
+		log.Println("Please check that your username and password is correct.")
+		log.Println("To see the output follow the instructions in https://github.com/versent/saml2aws#debugging-issues-with-idps")
+		return errors.New("Didn't get saml assertions")
+	}
+
+	role, err := selectAwsRole(samlAssertion, idpAccount)
+	if err != nil {
+		return errors.Wrap(err, "Failed to assume role. Please check whether you are permitted to assume the given role for the AWS service.")
+	}
+
 	return nil
 }
 
@@ -153,4 +184,76 @@ func (p awsProvisioner) Deprovision(ctx context.Context, in sdk.DeprovisionInput
 
 func (p awsProvisioner) Description() string {
 	return p.envVarProvisioner.Description()
+}
+
+func selectAwsRole(samlAssertion string, account *cfg.IDPAccount) (*saml2aws.AWSRole, error) {
+	data, err := b64.StdEncoding.DecodeString(samlAssertion)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error decoding SAML assertion.")
+	}
+
+	roles, err := saml2aws.ExtractAwsRoles(data)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error parsing AWS roles.")
+	}
+
+	if len(roles) == 0 {
+		log.Println("No roles to assume.")
+		log.Println("Please check you are permitted to assume roles for the AWS service.")
+		os.Exit(1)
+	}
+
+	awsRoles, err := saml2aws.ParseAWSRoles(roles)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error parsing AWS roles.")
+	}
+
+	return resolveRole(awsRoles, samlAssertion, account)
+}
+
+func resolveRole(awsRoles []*saml2aws.AWSRole, samlAssertion string, account *cfg.IDPAccount) (*saml2aws.AWSRole, error) {
+	var role = new(saml2aws.AWSRole)
+
+	if len(awsRoles) == 1 {
+		if account.RoleARN != "" {
+			return saml2aws.LocateRole(awsRoles, account.RoleARN)
+		}
+		return awsRoles[0], nil
+	} else if len(awsRoles) == 0 {
+		return nil, errors.New("No roles available.")
+	}
+
+	samlAssertionData, err := b64.StdEncoding.DecodeString(samlAssertion)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error decoding SAML assertion.")
+	}
+
+	aud, err := saml2aws.ExtractDestinationURL(samlAssertionData)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error parsing destination URL.")
+	}
+
+	awsAccounts, err := saml2aws.ParseAWSAccounts(aud, samlAssertion)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error parsing AWS role accounts.")
+	}
+	if len(awsAccounts) == 0 {
+		return nil, errors.New("No accounts available.")
+	}
+
+	saml2aws.AssignPrincipals(awsRoles, awsAccounts)
+
+	if account.RoleARN != "" {
+		return saml2aws.LocateRole(awsRoles, account.RoleARN)
+	}
+
+	for {
+		role, err = saml2aws.PromptForAWSRoleSelection(awsAccounts)
+		if err == nil {
+			break
+		}
+		log.Println("Error selecting role. Try again.")
+	}
+
+	return role, nil
 }
