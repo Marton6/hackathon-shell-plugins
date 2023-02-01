@@ -33,7 +33,7 @@ const (
 	OneTimePassword = sdk.FieldName("One-Time Password")
 	OrgURL          = sdk.FieldName("Org URL")
 	Organization    = sdk.FieldName("Organization")
-	Password        = sdk.FieldName("Password")
+	Password        = sdk.FieldName("Password1")
 	Port            = sdk.FieldName("Port")
 	PrivateKey      = sdk.FieldName("Private Key")
 	Region          = sdk.FieldName("Region")
@@ -42,7 +42,7 @@ const (
 	Token           = sdk.FieldName("Token")
 	URL             = sdk.FieldName("URL")
 	User            = sdk.FieldName("User")
-	Username        = sdk.FieldName("Username")
+	Username        = sdk.FieldName("Username1")
 	Website         = sdk.FieldName("Website")
 )
 

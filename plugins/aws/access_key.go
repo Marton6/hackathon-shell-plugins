@@ -22,17 +22,14 @@ func AccessKey() schema.CredentialType {
 			{
 				Name:                fieldname.Username,
 				MarkdownDescription: "The default region to use for this access key.",
-				Optional:            true,
 			},
 			{
 				Name:                fieldname.OneTimePassword,
 				MarkdownDescription: "The one-time code value for MFA authentication.",
-				Optional:            true,
 			},
 			{
 				Name:                fieldname.Password,
 				MarkdownDescription: "ARN of the MFA serial number to use to generate temporary STS credentials if the item contains a TOTP setup.",
-				Optional:            true,
 			},
 		},
 		DefaultProvisioner: AWSProvisioner(),
@@ -58,11 +55,11 @@ func AccessKey() schema.CredentialType {
 	}
 }
 
-var defaultEnvVarMapping = map[string]sdk.FieldName{
-	"AWS_ACCESS_KEY_ID":     fieldname.AccessKeyID,
-	"AWS_SECRET_ACCESS_KEY": fieldname.SecretAccessKey,
-	"AWS_DEFAULT_REGION":    fieldname.DefaultRegion,
-}
+//var defaultEnvVarMapping = map[string]sdk.FieldName{
+//	"AWS_ACCESS_KEY_ID":     fieldname.AccessKeyID,
+//	"AWS_SECRET_ACCESS_KEY": fieldname.SecretAccessKey,
+//	"AWS_DEFAULT_REGION":    fieldname.DefaultRegion,
+//}
 
 // TryCredentialsFile looks for the access key in the ~/.aws/credentials file.
 func TryCredentialsFile() sdk.Importer {

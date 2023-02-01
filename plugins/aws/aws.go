@@ -18,7 +18,7 @@ func AWSCLI() schema.Executable {
 		),
 		Uses: []schema.CredentialUsage{
 			{
-				Name: credname.AccessKey,
+				Name: credname.Credentials,
 			},
 		},
 	}

@@ -27,7 +27,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.4.19 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.9.19 // indirect
 	github.com/aws/smithy-go v1.13.4 // indirect
-	github.com/bearsh/hid v1.3.0 // indirect
+	github.com/bearsh/hid v1.4.1 // indirect
 	github.com/beevik/etree v1.1.0 // indirect
 	github.com/danwakefield/fnmatch v0.0.0-20160403171240-cbb64ac3d964 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
