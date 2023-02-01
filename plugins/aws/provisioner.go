@@ -2,10 +2,12 @@ package aws
 
 import (
 	"context"
-	"errors"
+	"github.com/1Password/shell-plugins/sdk/schema/fieldname"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/pkg/errors"
 
 	b64 "encoding/base64"
 
@@ -14,10 +16,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sts"
-	"github.com/pkg/errors"
 	"github.com/versent/saml2aws/pkg/awsconfig"
 	"github.com/versent/saml2aws/pkg/creds"
-	saml2aws "github.com/versent/saml2aws/v2"
+	"github.com/versent/saml2aws/v2"
 	"github.com/versent/saml2aws/v2/pkg/cfg"
 	"github.com/versent/saml2aws/v2/pkg/samlcache"
 )
@@ -48,17 +49,19 @@ func (p awsProvisioner) Provision(ctx context.Context, in sdk.ProvisionInput, ou
 			p.envVarProvisioner.Provision(ctx, in, out)
 		}
 	*/
-	err := p.provisionSAML()
+	err := p.provisionSAML(in)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (p awsProvisioner) provisionSAML() error {
-	accountName := "accName"
-	username := ""
-	password := "pwd"
-	mfaToken := "token"
+func (p awsProvisioner) provisionSAML(in sdk.ProvisionInput) error {
+	accountName := in.ItemFields[fieldname.Username]
+	username := in.ItemFields[fieldname.Username]
+	password := in.ItemFields[fieldname.Password]
+
+	// TODO: ensure that the One-Time Password is injected here, instead of field value
+	mfaToken := in.ItemFields[fieldname.OneTimePassword]
 
 	// TODO: after the hackathon, move the saml cache into the plugin cache
 	samlCacheFile := "./saml-cache"
@@ -87,19 +90,19 @@ func (p awsProvisioner) provisionSAML() error {
 	idpAccount := cfg.IDPAccount{
 		Name:                  accountName,
 		AppID:                 "",
-		URL:                   "",
-		Username:              "",
-		Provider:              "",
-		MFA:                   "",
-		SkipVerify:            false,
+		URL:                   "https://1password.okta.com/home/amazon_aws/0oacbnkkgfGssywZl357/272",
+		Username:              username,
+		Provider:              "Okta",
+		MFA:                   "OKTA",
+		SkipVerify:            true,
 		Timeout:               0,
 		AmazonWebservicesURN:  "",
-		SessionDuration:       0,
-		Profile:               "",
+		SessionDuration:       43200,
+		Profile:               "agilebits-dev",
 		ResourceID:            "",
 		Subdomain:             "",
-		RoleARN:               "",
-		Region:                "",
+		RoleARN:               "arn:aws:iam::729119775555:role/dev_Administrator",
+		Region:                "us-east-1",
 		HttpAttemptsCount:     "",
 		HttpRetryDelay:        "",
 		CredentialsFile:       "",
@@ -107,7 +110,7 @@ func (p awsProvisioner) provisionSAML() error {
 		SAMLCacheFile:         samlCacheFile,
 		TargetURL:             "",
 		DisableRememberDevice: false,
-		DisableSessions:       false,
+		DisableSessions:       true,
 		Prompter:              "",
 	}
 	provider, err := saml2aws.NewSAMLClient(&idpAccount)
@@ -130,7 +133,6 @@ func (p awsProvisioner) provisionSAML() error {
 	// loginDetails.ClientID = loginFlags.CommonFlags.ClientID
 	// loginDetails.ClientSecret = loginFlags.CommonFlags.ClientSecret
 	// assume --skip-prompt
-	loginDetails
 
 	// END INIT LOGIN DETAILS
 
