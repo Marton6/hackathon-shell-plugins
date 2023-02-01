@@ -50,13 +50,13 @@ func (p awsProvisioner) Provision(ctx context.Context, in sdk.ProvisionInput, ou
 			p.envVarProvisioner.Provision(ctx, in, out)
 		}
 	*/
-	err := p.provisionSAML(in)
+	err := p.provisionSAML(in, out)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (p awsProvisioner) provisionSAML(in sdk.ProvisionInput) error {
+func (p awsProvisioner) provisionSAML(in sdk.ProvisionInput, out *sdk.ProvisionOutput) error {
 	accountName := in.ItemFields[fieldname.Username]
 	username := in.ItemFields[fieldname.Username]
 	password := in.ItemFields[fieldname.Password]
@@ -186,6 +186,12 @@ func (p awsProvisioner) provisionSAML(in sdk.ProvisionInput) error {
 	if err != nil {
 		return errors.Wrap(err, "Error logging into AWS role using SAML assertion.")
 	}
+
+	out.AddEnvVar("AWS_ACCESS_KEY_ID", awsCreds.AWSAccessKey)
+	out.AddEnvVar("AWS_SECRET_ACCESS_KEY", awsCreds.AWSSecretKey)
+	out.AddEnvVar("AWS_REGION", awsCreds.Region)
+	out.AddEnvVar("AWS_SESSION_TOKEN", awsCreds.AWSSessionToken)
+	out.AddEnvVar("AWS_SECURITY_TOKEN", awsCreds.AWSSecurityToken)
 
 	// instead of writing awsCreds to the aws credentials file, provision them through the environment (?) to the command
 	return nil
