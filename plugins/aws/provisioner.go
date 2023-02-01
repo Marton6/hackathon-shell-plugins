@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"log"
-	"os"
 	"strings"
 
 	"github.com/1Password/shell-plugins/sdk"
@@ -49,6 +48,8 @@ func (p awsProvisioner) Provision(ctx context.Context, in sdk.ProvisionInput, ou
 
 func (p awsProvisioner) provisionSAML() error {
 	accountName := "accName"
+	username := ""
+	password := "pwd"
 
 	// TODO: after the hackathon, move the saml cache into the plugin cache
 	samlCacheFile := "./saml-cache"
@@ -105,11 +106,24 @@ func (p awsProvisioner) provisionSAML() error {
 		return errors.Wrap(err, "Error building IdP client.")
 	}
 
-	loginDetails, err := resolveLoginDetails(&idpAccount)
-	if err != nil {
-		log.Printf("%+v", err)
-		os.Exit(1)
+	// BEGIN INIT LOGIN DETAILS
+	loginDetails := &creds.LoginDetails{URL: idpAccount.URL, Username: idpAccount.Username, MFAToken: mfaToken}
+
+	// if user disabled keychain, dont use Okta sessions & dont remember Okta MFA device
+	if strings.ToLower(idpAccount.Provider) == "okta" {
+		idpAccount.DisableSessions = true
+		idpAccount.DisableRememberDevice = true
 	}
+
+	// log.Printf("%s %s", savedUsername, savedPassword)
+	loginDetails.Username = username
+	loginDetails.Password = password
+	// loginDetails.ClientID = loginFlags.CommonFlags.ClientID
+	// loginDetails.ClientSecret = loginFlags.CommonFlags.ClientSecret
+	// assume --skip-prompt
+	loginDetails
+
+	// END INIT LOGIN DETAILS
 
 	err = provider.Validate(loginDetails)
 	if err != nil {
@@ -131,58 +145,8 @@ func (p awsProvisioner) provisionSAML() error {
 	}
 }
 
-func resolveLoginDetails(account *cfg.IDPAccount, mfaToken string) (*creds.LoginDetails, error) {
+func resolveLoginDetails(account *cfg.IDPAccount, mfaToken string, username string) (*creds.LoginDetails, error) {
 
-	// log.Printf("loginFlags %+v", loginFlags)
-
-	loginDetails := &creds.LoginDetails{URL: account.URL, Username: account.Username, MFAToken: mfaToken}
-
-	// log.Printf("Using IdP Account %s to access %s %s", loginFlags.CommonFlags.IdpAccount, account.Provider, account.URL)
-
-	var err error
-	// if user disabled keychain, dont use Okta sessions & dont remember Okta MFA device
-	if strings.ToLower(account.Provider) == "okta" {
-		account.DisableSessions = true
-		account.DisableRememberDevice = true
-	}
-
-	// log.Printf("%s %s", savedUsername, savedPassword)
-
-	// if you supply a username in a flag it takes precedence
-	if loginFlags.CommonFlags.Username != "" {
-		loginDetails.Username = loginFlags.CommonFlags.Username
-	}
-
-	// if you supply a password in a flag it takes precedence
-	if loginFlags.CommonFlags.Password != "" {
-		loginDetails.Password = loginFlags.CommonFlags.Password
-	}
-
-	// if you supply a cleint_id in a flag it takes precedence
-	if loginFlags.CommonFlags.ClientID != "" {
-		loginDetails.ClientID = loginFlags.CommonFlags.ClientID
-	}
-
-	// if you supply a client_secret in a flag it takes precedence
-	if loginFlags.CommonFlags.ClientSecret != "" {
-		loginDetails.ClientSecret = loginFlags.CommonFlags.ClientSecret
-	}
-
-	// log.Printf("loginDetails %+v", loginDetails)
-
-	// if skip prompt was passed just pass back the flag values
-	if loginFlags.CommonFlags.SkipPrompt {
-		return loginDetails, nil
-	}
-
-	if account.Provider != "Shell" {
-		err = saml2aws.PromptForLoginDetails(loginDetails, account.Provider)
-		if err != nil {
-			return nil, errors.Wrap(err, "Error occurred accepting input.")
-		}
-	}
-
-	return loginDetails, nil
 }
 
 func (p awsProvisioner) Deprovision(ctx context.Context, in sdk.DeprovisionInput, out *sdk.DeprovisionOutput) {
