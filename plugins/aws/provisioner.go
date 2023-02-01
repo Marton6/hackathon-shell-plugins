@@ -11,7 +11,11 @@ import (
 
 	"github.com/1Password/shell-plugins/sdk"
 	"github.com/1Password/shell-plugins/sdk/provision"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/pkg/errors"
+	"github.com/versent/saml2aws/pkg/awsconfig"
 	"github.com/versent/saml2aws/pkg/creds"
 	saml2aws "github.com/versent/saml2aws/v2"
 	"github.com/versent/saml2aws/v2/pkg/cfg"
@@ -175,6 +179,12 @@ func (p awsProvisioner) provisionSAML() error {
 		return errors.Wrap(err, "Failed to assume role. Please check whether you are permitted to assume the given role for the AWS service.")
 	}
 
+	awsCreds, err := loginToStsUsingRole(idpAccount, role, samlAssertion)
+	if err != nil {
+		return errors.Wrap(err, "Error logging into AWS role using SAML assertion.")
+	}
+
+	// instead of writing awsCreds to the aws credentials file, provision them through the environment (?) to the command
 	return nil
 }
 
@@ -256,4 +266,40 @@ func resolveRole(awsRoles []*saml2aws.AWSRole, samlAssertion string, account *cf
 	}
 
 	return role, nil
+}
+
+func loginToStsUsingRole(account *cfg.IDPAccount, role *saml2aws.AWSRole, samlAssertion string) (*awsconfig.AWSCredentials, error) {
+
+	sess, err := session.NewSession(&aws.Config{
+		Region: &account.Region,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to create session.")
+	}
+
+	svc := sts.New(sess)
+
+	params := &sts.AssumeRoleWithSAMLInput{
+		PrincipalArn:    aws.String(role.PrincipalARN), // Required
+		RoleArn:         aws.String(role.RoleARN),      // Required
+		SAMLAssertion:   aws.String(samlAssertion),     // Required
+		DurationSeconds: aws.Int64(int64(account.SessionDuration)),
+	}
+
+	log.Println("Requesting AWS credentials using SAML assertion.")
+
+	resp, err := svc.AssumeRoleWithSAML(params)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error retrieving STS credentials using SAML.")
+	}
+
+	return &awsconfig.AWSCredentials{
+		AWSAccessKey:     aws.StringValue(resp.Credentials.AccessKeyId),
+		AWSSecretKey:     aws.StringValue(resp.Credentials.SecretAccessKey),
+		AWSSessionToken:  aws.StringValue(resp.Credentials.SessionToken),
+		AWSSecurityToken: aws.StringValue(resp.Credentials.SessionToken),
+		PrincipalARN:     aws.StringValue(resp.AssumedRoleUser.Arn),
+		Expires:          resp.Credentials.Expiration.Local(),
+		Region:           account.Region,
+	}, nil
 }
