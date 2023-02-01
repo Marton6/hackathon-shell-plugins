@@ -50,6 +50,7 @@ func (p awsProvisioner) provisionSAML() error {
 	accountName := "accName"
 	username := ""
 	password := "pwd"
+	mfaToken := "token"
 
 	// TODO: after the hackathon, move the saml cache into the plugin cache
 	samlCacheFile := "./saml-cache"
